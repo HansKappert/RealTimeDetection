@@ -48,44 +48,51 @@ def make_datum(img, label):
         data=np.rollaxis(img, 2).tostring())
 
 
-def make_lmdb(lmdb_folder, img_root_folder):
-    in_db = lmdb.open(lmdb_folder, map_size=int(1e12))
-    in_idx = 0
+def make_lmdb(train_lmdb_folder,validate_lmdb_folder, img_root_folder, ):
+    train_db = lmdb.open(train_lmdb_folder, map_size=int(1e12))
+    val_db = lmdb.open(validate_lmdb_folder, map_size=int(1e12))
+    train_idx = 0
+    val_idx = 0
+    idx = 0
     category = 0
-    with in_db.begin(write=True) as in_txn:
-        for dirpath, dirnames, filenames in os.walk(img_root_folder):
-            dirnames.sort()
-            for dirname in dirnames:
-                for u1, u2, img_names in os.walk(os.path.join(args.train, dirname)):
-                    random.shuffle(img_names)
-                    for img_name in img_names:
-                        img_path = os.path.join(args.train, dirname, img_name)
-                        img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-                        img = transform_img(img, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT)
-                        datum = make_datum(img, category)
-                        str_id = '{:0>5d}'.format(in_idx)
-                        in_txn.put(str_id.encode('ascii'), datum.SerializeToString())
-                        print('{:0>5d}'.format(in_idx) + ':' + img_path)
-                        in_idx += 1
-                category += 1
-    in_db.close()
+    with train_db.begin(write=True) as train_txn:
+        with val_db.begin(write=True) as val_txn:
+            for dirpath, dirnames, filenames in os.walk(img_root_folder):
+                dirnames.sort()
+                for dirname in dirnames:
+                    for u1, u2, img_names in os.walk(os.path.join(args.train, dirname)):
+                        random.shuffle(img_names)
+                        for img_name in img_names:
+                            img_path = os.path.join(args.train, dirname, img_name)
+                            img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+                            img = transform_img(img, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT)
+                            datum = make_datum(img, category)
+                            if idx % 6 == 0:
+                                str_id = '{:0>5d}'.format(val_idx)
+                                val_txn.put(str_id.encode('ascii'), datum.SerializeToString())
+                                print('val   {:0>5d}'.format(val_idx) + ':' + img_path)
+                                val_idx += 1
+                            else:
+                                str_id = '{:0>5d}'.format(train_idx)
+                                train_txn.put(str_id.encode('ascii'), datum.SerializeToString())
+                                print('train {:0>5d}'.format(train_idx) + ':' + img_path)
+                                train_idx += 1
+                            idx += 1
+                    category += 1
+    train_db.close()
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-lmdb', '--lmdb', help='location for lmdb files')
 parser.add_argument('-r', '--train', help='train data folder name')
-parser.add_argument('-t', '--test', help='validation data folder name')
 
 args = parser.parse_args()
 
-if args.lmdb is None or args.train is None or args.test is None:
-    print("Usage: python3 create_lmdb.py --lmdb=[folder] --train=[folder] --test=[folder]")
+if args.lmdb is None or args.train is None:
+    print("Usage: python3 create_lmdb.py --lmdb=[folder] --train=[folder]")
     quit()
 
-print('Creating train_lmdb')
-make_lmdb(args.lmdb + '/train_lmdb', args.train)
-
-print('\nCreating validation_lmdb')
-make_lmdb(args.lmdb + '/validation_lmdb', args.test)
+print('Creating train_lmdb and validation_lmdb')
+make_lmdb(args.lmdb + '/train_lmdb', args.lmdb + '/validation_lmdb', args.train)
 
 print('\nFinished processing all images')
