@@ -1,4 +1,1 @@
-find . -type d -print0 | while read -d '' -r dir; do
-    files=("$dir"/*)
-    printf "%5d files in directory %s\n" "${#files[@]}" "$dir"
-done
+du -a|tr '[:upper:]' '[:lower:]' |grep '.jp' | sed '/.*\.\/.*\/.*/!d' | cut -d/ -f2 | sort | uniq -c 
